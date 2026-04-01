@@ -3,11 +3,9 @@ pandas
 openai
 transformers==4.38.1
 huggingface-hub
-sentencepiece
 langchain
 langchain-community
 langchain-text-splitters
-sentence-transformers
 pypdf
 torch
 torchvision
