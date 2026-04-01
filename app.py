@@ -1,6 +1,6 @@
 import os
 
-# 1. SET CACHE PATHS BEFORE IMPORTING AI LIBRARIES
+# 1. SET CACHE PATHS BEFORE IMPORTING AI LIBRARIES 
 os.environ["HF_HOME"] = "/home/huggingface_cache"
 os.environ["TRANSFORMERS_CACHE"] = "/home/huggingface_cache"
 os.environ["SENTENCE_TRANSFORMERS_HOME"] = "/home/huggingface_cache"
