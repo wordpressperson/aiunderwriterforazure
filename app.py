@@ -1,10 +1,19 @@
 import os
+from huggingface_hub import login
 
 # 1. SET CACHE PATHS BEFORE IMPORTING AI LIBRARIES
 os.environ["HF_HOME"] = "/home/huggingface_cache"
 os.environ["TRANSFORMERS_CACHE"] = "/home/huggingface_cache"
 os.environ["SENTENCE_TRANSFORMERS_HOME"] = "/home/huggingface_cache"
 os.makedirs("/home/huggingface_cache", exist_ok=True)
+
+# 2. EXPLICITLY FORCE HUGGING FACE AUTHENTICATION
+# This grabs the token you added to Azure's Environment Variables
+hf_token = os.environ.get("HF_TOKEN")
+if hf_token:
+    login(token=hf_token)
+else:
+    print("Warning: HF_TOKEN not found in Azure environment variables.")
 
 import streamlit as st
 import pandas as pd
@@ -13,6 +22,7 @@ from transformers import pipeline
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter, SentenceTransformersTokenTextSplitter
 
+# --- UI Configuration ---
 # --- UI Configuration ---
 st.set_page_config(
     page_title="AI Underwriter Pro",
