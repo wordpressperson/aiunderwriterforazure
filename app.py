@@ -6,6 +6,36 @@ from transformers import pipeline
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter, SentenceTransformersTokenTextSplitter
 
+# --- NEW BLOCK: AZURE CACHE & PRE-LOADER ---
+# 1. Force all AI libraries to use Azure's persistent, writable storage
+os.environ["HF_HOME"] = "/home/huggingface_cache"
+os.environ["TRANSFORMERS_CACHE"] = "/home/huggingface_cache"
+os.environ["SENTENCE_TRANSFORMERS_HOME"] = "/home/huggingface_cache"
+os.makedirs("/home/huggingface_cache", exist_ok=True)
+
+@st.cache_resource
+def preload_ai_models():
+    """
+    Downloads models during server startup. 
+    This bypasses Azure's 230-second web request timeout.
+    """
+    from sentence_transformers import SentenceTransformer
+    SentenceTransformer("BAAI/bge-large-en-v1.5")
+    pipeline("summarization", model="facebook/bart-large-cnn")
+
+# 2. Trigger the download immediately when the app wakes up
+preload_ai_models()
+# -------------------------------------------
+
+# --- UI Configuration ---
+st.set_page_config(
+    page_title="AI Underwriter Pro",
+    page_icon="🛡️",
+    layout="wide",
+    initial_sidebar_state="collapsed"
+)
+# ... (the rest of your app.py code continues as normal)
+
 # --- UI Configuration ---
 st.set_page_config(
     page_title="AI Underwriter Pro",
