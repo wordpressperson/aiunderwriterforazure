@@ -1,17 +1,15 @@
 import os
 import streamlit as st
-
-# 1 SET CACHE PATHS BEFORE IMPORTING AI LIBRARIES
-os.environ["HF_HOME"] = "/home/huggingface_cache"
-os.environ["TRANSFORMERS_CACHE"] = "/home/huggingface_cache"
-os.environ["SENTENCE_TRANSFORMERS_HOME"] = "/home/huggingface_cache"
-os.makedirs("/home/huggingface_cache", exist_ok=True)
-
 import pandas as pd
 from openai import OpenAI
 from transformers import pipeline
 from langchain_community.document_loaders import PyPDFLoader
-from langchain_text_splitters import RecursiveCharacterTextSplitter, SentenceTransformersTokenTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+
+# 1. SET CACHE PATHS BEFORE IMPORTING AI LIBRARIES
+os.environ["HF_HOME"] = "/home/huggingface_cache"
+os.environ["TRANSFORMERS_CACHE"] = "/home/huggingface_cache"
+os.makedirs("/home/huggingface_cache", exist_ok=True)
 
 # --- UI Configuration ---
 st.set_page_config(
@@ -73,33 +71,22 @@ def extract_data(file, file_name):
     loader = PyPDFLoader(file_path)
     pages = loader.load()
 
-    # --- GRAB TOKEN FROM AZURE ---
     hf_token = os.environ.get("HF_TOKEN")
 
     if file_name == "underwriting_guidlines":
-        
-        # Inject token directly into the LangChain splitter
-        text_splitter = SentenceTransformersTokenTextSplitter(
-            chunk_overlap=50, 
-            model_name="BAAI/bge-large-en-v1.5", 
-            tokens_per_chunk=512,
-            model_kwargs={"token": hf_token} 
-        )
+        # 1. Use the lightweight, math-based splitter (No AI download required)
+        text_splitter = RecursiveCharacterTextSplitter(chunk_size=2500, chunk_overlap=200, length_function=len)
         guidelines_docs = text_splitter.split_documents(pages)
-        guidelines = "\n\n".join([doc.page_content for doc in guidelines_docs])
         
-        chunk_size = 512
-        summarized_chunks = []
-        chunks = [guidelines[i:i+chunk_size] for i in range(0, len(guidelines), chunk_size)]
-        
-        # Inject token directly into the Transformers pipeline
+        # 2. Azure now only needs to download the Summarizer
         summarizer = pipeline("summarization", model="facebook/bart-large-cnn", token=hf_token)
         
-        for chunk in chunks:
-            summarized_chunk = summarizer(chunk, max_length=chunk_size)
-            summarized_chunks.append(summarized_chunk)
+        summarized_texts = []
+        # 3. Iterate cleanly through the LangChain document objects
+        for doc in guidelines_docs:
+            summarized_chunk = summarizer(doc.page_content, max_length=200, min_length=50, do_sample=False)
+            summarized_texts.append(summarized_chunk[0]["summary_text"])
             
-        summarized_texts = [result[0]["summary_text"] for result in summarized_chunks]
         text_content = "\n\n".join(summarized_texts)
     
     else:
@@ -111,6 +98,7 @@ def extract_data(file, file_name):
         os.remove(file_path)
 
     return text_content
+
 
 def main():
     st.markdown("<h1 style='text-align: center;'>Insurance Risk Analysis Engine</h1>", unsafe_allow_html=True)
@@ -137,9 +125,9 @@ def main():
         
     if analyze_btn:
         if uploaded_underwriting_guidelines and uploaded_application_form:       
-            with st.status("Initializing AI Models (This takes 2-3 minutes the very first time)...", expanded=True) as status:
+            with st.status("Initializing AI Models (This takes 1-2 minutes the very first time)...", expanded=True) as status:
                 
-                st.write("Extracting data from documents using local ML models...")
+                st.write("Extracting and summarizing data using local ML models...")
                 parsed_guidelines = extract_data(uploaded_underwriting_guidelines, "underwriting_guidlines")
                 parsed_application_form = extract_data(uploaded_application_form, "application_form")
                 
@@ -156,7 +144,6 @@ def main():
                     st.info(risk)
         else:
             st.warning("⚠️ Please upload both the guidelines and the application form to proceed.")
-
 
 if __name__ == '__main__':
     main()
