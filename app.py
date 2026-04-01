@@ -7,18 +7,6 @@ os.environ["TRANSFORMERS_CACHE"] = "/home/huggingface_cache"
 os.environ["SENTENCE_TRANSFORMERS_HOME"] = "/home/huggingface_cache"
 os.makedirs("/home/huggingface_cache", exist_ok=True)
 
-# 2. HUGGING FACE AUTHENTICATION (CACHED TO PREVENT 429 ERRORS)
-@st.cache_resource
-def authenticate_huggingface():
-    from huggingface_hub import login
-    hf_token = os.environ.get("HF_TOKEN")
-    if hf_token:
-        # This will now only execute ONE time per server boot
-        login(token=hf_token)
-    return True
-
-authenticate_huggingface()
-
 import pandas as pd
 from openai import OpenAI
 from transformers import pipeline
@@ -85,11 +73,17 @@ def extract_data(file, file_name):
     loader = PyPDFLoader(file_path)
     pages = loader.load()
 
+    # --- GRAB TOKEN FROM AZURE ---
+    hf_token = os.environ.get("HF_TOKEN")
+
     if file_name == "underwriting_guidlines":
+        
+        # Inject token directly into the LangChain splitter
         text_splitter = SentenceTransformersTokenTextSplitter(
             chunk_overlap=50, 
             model_name="BAAI/bge-large-en-v1.5", 
-            tokens_per_chunk=512
+            tokens_per_chunk=512,
+            model_kwargs={"token": hf_token} 
         )
         guidelines_docs = text_splitter.split_documents(pages)
         guidelines = "\n\n".join([doc.page_content for doc in guidelines_docs])
@@ -98,7 +92,9 @@ def extract_data(file, file_name):
         summarized_chunks = []
         chunks = [guidelines[i:i+chunk_size] for i in range(0, len(guidelines), chunk_size)]
         
-        summarizer = pipeline("summarization", model="facebook/bart-large-cnn")
+        # Inject token directly into the Transformers pipeline
+        summarizer = pipeline("summarization", model="facebook/bart-large-cnn", token=hf_token)
+        
         for chunk in chunks:
             summarized_chunk = summarizer(chunk, max_length=chunk_size)
             summarized_chunks.append(summarized_chunk)
@@ -115,7 +111,6 @@ def extract_data(file, file_name):
         os.remove(file_path)
 
     return text_content
-
 
 def main():
     st.markdown("<h1 style='text-align: center;'>Insurance Risk Analysis Engine</h1>", unsafe_allow_html=True)
