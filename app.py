@@ -1,40 +1,17 @@
 import os
+
+# 1. SET CACHE PATHS BEFORE IMPORTING AI LIBRARIES
+os.environ["HF_HOME"] = "/home/huggingface_cache"
+os.environ["TRANSFORMERS_CACHE"] = "/home/huggingface_cache"
+os.environ["SENTENCE_TRANSFORMERS_HOME"] = "/home/huggingface_cache"
+os.makedirs("/home/huggingface_cache", exist_ok=True)
+
 import streamlit as st
 import pandas as pd
 from openai import OpenAI
 from transformers import pipeline
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter, SentenceTransformersTokenTextSplitter
-
-# --- NEW BLOCK: AZURE CACHE & PRE-LOADER ---
-# 1. Force all AI libraries to use Azure's persistent, writable storage
-os.environ["HF_HOME"] = "/home/huggingface_cache"
-os.environ["TRANSFORMERS_CACHE"] = "/home/huggingface_cache"
-os.environ["SENTENCE_TRANSFORMERS_HOME"] = "/home/huggingface_cache"
-os.makedirs("/home/huggingface_cache", exist_ok=True)
-
-@st.cache_resource
-def preload_ai_models():
-    """
-    Downloads models during server startup. 
-    This bypasses Azure's 230-second web request timeout.
-    """
-    from sentence_transformers import SentenceTransformer
-    SentenceTransformer("BAAI/bge-large-en-v1.5")
-    pipeline("summarization", model="facebook/bart-large-cnn")
-
-# 2. Trigger the download immediately when the app wakes up
-preload_ai_models()
-# -------------------------------------------
-
-# --- UI Configuration ---
-st.set_page_config(
-    page_title="AI Underwriter Pro",
-    page_icon="🛡️",
-    layout="wide",
-    initial_sidebar_state="collapsed"
-)
-# ... (the rest of your app.py code continues as normal)
 
 # --- UI Configuration ---
 st.set_page_config(
@@ -87,21 +64,15 @@ def analyze_risk(parsed_guidlines, parsed_application_form):
 @st.cache_data
 @st.cache_resource
 def extract_data(file, file_name):
-    # 1. Extract bytes from the Streamlit UploadedFile object
     file_bytes = file.getvalue()
-    
-    # 2. Create a unique temporary file path on the server's disk
     file_path = f"temp_{file_name}.pdf"
     
-    # 3. Write the bytes to this physical file
     with open(file_path, "wb") as temp_file:
         temp_file.write(file_bytes)
 
-    # 4. Now LangChain can read it from the disk
     loader = PyPDFLoader(file_path)
     pages = loader.load()
 
-    # 5. Local Model Processing
     if file_name == "underwriting_guidlines":
         text_splitter = SentenceTransformersTokenTextSplitter(
             chunk_overlap=50, 
@@ -115,7 +86,6 @@ def extract_data(file, file_name):
         summarized_chunks = []
         chunks = [guidelines[i:i+chunk_size] for i in range(0, len(guidelines), chunk_size)]
         
-        # Using local BART model for summarization
         summarizer = pipeline("summarization", model="facebook/bart-large-cnn")
         for chunk in chunks:
             summarized_chunk = summarizer(chunk, max_length=chunk_size)
@@ -129,7 +99,6 @@ def extract_data(file, file_name):
         docs = text_splitter.split_documents(pages)
         text_content = "\n\n".join([doc.page_content for doc in docs])
 
-    # 6. Clean up the physical file
     if os.path.exists(file_path):
         os.remove(file_path)
 
@@ -161,7 +130,8 @@ def main():
         
     if analyze_btn:
         if uploaded_underwriting_guidelines and uploaded_application_form:       
-            with st.status("Performing Risk Analysis...", expanded=True) as status:
+            with st.status("Initializing AI Models (This takes 2-3 minutes the very first time)...", expanded=True) as status:
+                
                 st.write("Extracting data from documents using local ML models...")
                 parsed_guidelines = extract_data(uploaded_underwriting_guidelines, "underwriting_guidlines")
                 parsed_application_form = extract_data(uploaded_application_form, "application_form")
